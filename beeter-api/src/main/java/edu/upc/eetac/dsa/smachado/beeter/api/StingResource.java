@@ -39,8 +39,8 @@ public class StingResource {
 	private String GET_STINGS_QUERY = "select s.*, u.name from stings s, users u where u.username=s.username and s.creation_timestamp < ifnull(?, now())  order by creation_timestamp desc limit ?";
 	private String GET_STINGS_QUERY_FROM_LAST = "select s.*, u.name from stings s, users u where u.username=s.username and s.creation_timestamp > ? order by creation_timestamp desc";
 	private String GET_STING_BY_ID_QUERY = "select s.*, u.name from stings s, users u where u.username=s.username and s.stingid=?";
-	private String GET_STING_BY_USERNAME = "select s.* from stings s, users u where u.username=s.username and s.username=?";
-	private String GET_STING_BY_USERNAME_X = "select s.* from stings s, users u where u.username=s.username and s.username=?";
+	private String GET_STING_BY_USERNAME = "select s.* from stings s, users u where u.username=s.username and s.username=? and s.creation_timestamp < ifnull(?, now())  order by creation_timestamp desc limit ?";
+	private String GET_STING_BY_USERNAME_FROM_LAST = "select s.* from stings s, users u where u.username=s.username and s.username=?  and s.creation_timestamp > ? order by creation_timestamp desc";
 	private String INSERT_STING_QUERY = "insert into stings (username, subject, content) value (?, ?, ?)";
 	private String DELETE_STING_QUERY = "delete from stings where stingid=?";
 	private String UPDATE_STING_QUERY = "update stings set subject=ifnull(?, subject), content=ifnull(?, content) where stingid=?";
@@ -128,10 +128,25 @@ public class StingResource {
 		}
 		PreparedStatement stmt = null;
 		try {
-			stmt = conn.prepareStatement(GET_STING_BY_USERNAME);
-			stmt.setString(1, username);
+			boolean updateFromLast = after > 0;
+			stmt = updateFromLast ? conn
+					.prepareStatement(GET_STING_BY_USERNAME_FROM_LAST) : conn
+					.prepareStatement(GET_STING_BY_USERNAME);
+					stmt.setString(1, username);
+			if (updateFromLast) {
+				stmt.setTimestamp(2, new Timestamp(after));
+			} else {
+				if (before > 0)
+					stmt.setTimestamp(2, new Timestamp(before));
+				else
+					stmt.setTimestamp(2, null);
+				length = (length <= 0) ? 5 : length;
+				stmt.setInt(3, length);
+			}
 			
 			ResultSet rs = stmt.executeQuery();
+			boolean first = true;
+			long oldestTimestamp = 0;
 			while (rs.next()) {
 				Sting sting = new Sting();
 				sting.setStingid(rs.getInt("stingid"));
@@ -140,8 +155,15 @@ public class StingResource {
 				sting.setContent(rs.getString("content"));
 				sting.setLastModified(rs.getTimestamp("last_modified").getTime());
 				sting.setCreationTimestamp(rs.getTimestamp("creation_timestamp").getTime());
+				oldestTimestamp = rs.getTimestamp("last_modified").getTime();
+				sting.setLastModified(oldestTimestamp);
+				if (first) {
+					first = false;
+					stings.setNewestTimestamp(sting.getLastModified());
+				}
 				stings.addSting(sting);
-			} 		
+			} 
+			stings.setOldestTimestamp(oldestTimestamp);
 			
 		} catch (SQLException e) {
 			throw new ServerErrorException(e.getMessage(),
