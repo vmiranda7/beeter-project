@@ -111,6 +111,8 @@ public class StingResource {
 	}
 
 	
+	// EJERCICIO2
+	// Apartado 3
 	
 	@GET
 	@Path("/stingusers/{username}")

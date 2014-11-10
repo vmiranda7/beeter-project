@@ -79,6 +79,7 @@ public class UserResource {
 	
 	
 	// EJERCICIO2
+	// Apartado 1
 	
 	@GET
 	@Path("/{username}")
